@@ -1,3 +1,4 @@
 language: java
 notifications:
   email: false
+script: mvn test
