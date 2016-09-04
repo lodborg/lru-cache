@@ -112,6 +112,7 @@ public class LRUCache<K, V> {
 	private HashMap<K, Node> map;
 	private int maxSize;
 	private int size;
+	EvictionListener<K, V> listener;
 
 	/**
 	 * Instantiates a new cache instance.
@@ -125,6 +126,13 @@ public class LRUCache<K, V> {
 		map = new HashMap<>();
 	}
 
+	public void setListener(EvictionListener<K, V> listener){
+		this.listener = listener;
+	}
+
+	public void removeListener(){
+		this.listener = null;
+	}
 
 	/**
 	 * Returns the value for the given key, if it is stored in the cache, or null
@@ -156,7 +164,10 @@ public class LRUCache<K, V> {
 			list.offer(node);
 			map.put(key, node);
 			if (size == maxSize){
-				map.remove(list.poll().key);
+				Node removed = list.poll();
+				if (listener != null)
+					listener.onEvict(removed.key, removed.value);
+				map.remove(removed.key);
 			} else
 				size++;
 		} else {

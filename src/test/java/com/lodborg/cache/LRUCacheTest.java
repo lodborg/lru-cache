@@ -228,4 +228,21 @@ public class LRUCacheTest {
 		assertNull(cache.get(4));
 		assertEquals("(7,1,2,6,5)", cache.toString());
 	}
+
+	@Test
+	public void test_String(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		assertTrue(1 == cache.get("New York"));
+		cache.put("Tokyo", 4);
+		assertNull(cache.get("London"));
+		assertTrue(1 == cache.get("New York"));
+		assertEquals("(New York,Tokyo,Berlin)", cache.toString());
+		cache.evict(new String("Tokyo"));
+		assertEquals(2, cache.size());
+		assertNull(cache.get("Tokyo"));
+		assertTrue(3 == cache.get(new String("Berlin")));
+	}
 }
