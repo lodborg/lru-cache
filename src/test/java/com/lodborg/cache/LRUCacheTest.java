@@ -200,6 +200,10 @@ public class LRUCacheTest {
 		cache.put(4, 14);
 		assertEquals(4, cache.size());
 		cache.evictAll();
+		assertNull(cache.get(1));
+		assertNull(cache.get(2));
+		assertNull(cache.get(3));
+		assertNull(cache.get(4));
 		assertEquals(0, cache.size());
 	}
 
