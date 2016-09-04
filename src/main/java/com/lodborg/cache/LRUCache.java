@@ -1,6 +1,9 @@
 package com.lodborg.cache;
 
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 /**
  * The LRU cache consists of a doubly linked list and a hash map. Each node in
@@ -17,23 +20,38 @@ import java.util.HashMap;
  * the LinkedList implementation from java.util is not an option. Instead,
  * a custom private list class is provided.
  *
+ * The iterator of the cache returns the Nodes of the linked list in the order
+ * they are stored, the most recent elements first. The iterator is fail-fast,
+ * meaning that it will throw a ConcurrentModificationException, if the cache
+ * gets modified by any means other than the iterator's remove() method.
+ * Iterating via the iterator doesn't cause the elements to be bumped to the
+ * head of the cache.
+ *
  * @param <K> The generic type of the keys
  * @param <V> The generic type of the values
  */
-public class LRUCache<K, V> {
+public class LRUCache<K, V> implements Iterable<LRUCache.Node<K, V>>{
 
 	/**
 	 * A class representing a node in the doubly linked list. The node is the only
 	 * place in the cache actually containing the real value mapped to a key.
 	 */
-	private class Node{
-		K key;
-		V value;
-		Node prev, next;
+	public static class Node<K, V>{
+		private K key;
+		private V value;
+		private Node<K, V> prev, next;
 
 		private Node(K key, V value){
 			this.key = key;
 			this.value = value;
+		}
+
+		public K getKey(){
+			return key;
+		}
+
+		public V getValue(){
+			return value;
 		}
 	}
 
@@ -41,22 +59,22 @@ public class LRUCache<K, V> {
 	 * An implementation of a queue using a doubly linked list.
 	 */
 	private class LinkedList {
-		private Node head, last;
+		private Node<K, V> head, last;
 
 		/**
 		 * Detaches the last node from the tail of the list and returns it.
 		 * @return The last node from the tail of the list, after it was detached
 		 *         from the list. Returns null, if the list was empty.
 		 */
-		private Node poll(){
+		private Node<K, V> poll(){
 			if (head == null)
 				return null;
 			if (head == last){
-				Node node = last;
+				Node<K, V> node = last;
 				head = last = null;
 				return node;
 			}
-			Node node = last;
+			Node<K, V> node = last;
 			last = last.prev;
 			last.next = null;
 			node.prev = null;
@@ -67,7 +85,7 @@ public class LRUCache<K, V> {
 		 * Adds a node at the head of the list.
 		 * @param node The node that will be added.
 		 */
-		private void offer(Node node){
+		private void offer(Node<K, V> node){
 			if (head == null){
 				head = last = node;
 				return;
@@ -83,7 +101,7 @@ public class LRUCache<K, V> {
 		 * has to make sure that she is removing nodes from the correct list.
 		 * @param node A reference to he node to be removed.
 		 */
-		private void remove(Node node){
+		private void remove(Node<K, V> node){
 			if (node == last){
 				poll();
 			} else {
@@ -109,10 +127,11 @@ public class LRUCache<K, V> {
 	}
 
 	private LinkedList list;
-	private HashMap<K, Node> map;
+	private HashMap<K, Node<K, V>> map;
 	private int maxSize;
 	private int size;
-	EvictionListener<K, V> listener;
+	private EvictionListener<K, V> listener;
+	private int modCount;
 
 	/**
 	 * Instantiates a new cache instance.
@@ -142,7 +161,8 @@ public class LRUCache<K, V> {
 	 * @return The value associated with the key or null, if not in the cache
 	 */
 	public V get(K key){
-		Node node = map.get(key);
+		modCount++;
+		Node<K, V> node = map.get(key);
 		if (node == null)
 			return null;
 		list.remove(node);
@@ -158,13 +178,14 @@ public class LRUCache<K, V> {
 	 * @param value The value associated to the key.
 	 */
 	public void put(K key, V value){
-		Node node = map.get(key);
+		modCount++;
+		Node<K, V> node = map.get(key);
 		if (node == null){
-			node = new Node(key, value);
+			node = new Node<>(key, value);
 			list.offer(node);
 			map.put(key, node);
 			if (size == maxSize){
-				Node removed = list.poll();
+				Node<K, V> removed = list.poll();
 				if (listener != null)
 					listener.onEvict(removed.key, removed.value);
 				map.remove(removed.key);
@@ -182,7 +203,8 @@ public class LRUCache<K, V> {
 	 * @param key The key to be removed.
 	 */
 	public void evict(K key){
-		Node node = map.get(key);
+		modCount++;
+		Node<K, V> node = map.get(key);
 		if (node != null) {
 			list.remove(node);
 			map.remove(key);
@@ -198,6 +220,7 @@ public class LRUCache<K, V> {
 	}
 
 	public void evictAll(){
+		modCount++;
 		list.clear();
 		map.clear();
 		size = 0;
@@ -219,5 +242,51 @@ public class LRUCache<K, V> {
 		}
 		builder.append(')');
 		return builder.toString();
+	}
+
+	/**
+	 * The iterator will return the elements in the cache in the order they are stored,
+	 * most recent elements first. The iterator is fail-fast and will fail, if the
+	 * cache has been modified by any means other than the iterator's own remove() method.
+	 */
+	@Override
+	public Iterator<LRUCache.Node<K, V>> iterator() {
+		// The prev pointer of the head is not set, because this is only a temporary node.
+		// It must be garbage collected once the iterator moves to the next element, that's
+		// why there has to be no permanent references to it.
+		final Node<K, V> placeholder = new Node<>(null, null);
+		placeholder.next = list.head;
+
+		return new Iterator<LRUCache.Node<K, V>>() {
+			Node<K, V> node = placeholder;
+			int currentModCount = modCount;
+
+			@Override
+			public boolean hasNext() {
+				return node.next != null;
+			}
+
+			@Override
+			public Node<K, V> next() {
+				if (currentModCount != modCount)
+					throw new ConcurrentModificationException();
+				if (!hasNext())
+					throw new NoSuchElementException();
+
+				node = node.next;
+				return node;
+			}
+
+			@Override
+			public void remove() {
+				if (node.key != null ) {
+					Node<K, V> placeholder = new Node<>(null, null);
+					placeholder.next = node.next;
+					evict(node.key);
+					node = placeholder;
+					currentModCount++;
+				}
+			}
+		};
 	}
 }

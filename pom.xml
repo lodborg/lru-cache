@@ -6,7 +6,7 @@
 	<groupId>com.lodborg.cache</groupId>
 	<artifactId>lru-cache</artifactId>
 	<packaging>jar</packaging>
-	<version>1.0.0</version>
+	<version>1.0.1</version>
 	<name>LRU Cache</name>
 	<dependencies>
 		<dependency>

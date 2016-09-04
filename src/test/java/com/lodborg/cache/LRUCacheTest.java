@@ -2,9 +2,11 @@ package com.lodborg.cache;
 
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
+import static org.junit.Assert.*;
 
 public class LRUCacheTest {
 
@@ -244,5 +246,211 @@ public class LRUCacheTest {
 		assertEquals(2, cache.size());
 		assertNull(cache.get("Tokyo"));
 		assertTrue(3 == cache.get(new String("Berlin")));
+	}
+
+	@Test
+	public void test_iterator(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		assertTrue(1 == cache.get("New York"));
+		cache.put("Tokyo", 4);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertEquals("Tokyo", it.next().getKey());
+		assertEquals("New York", it.next().getKey());
+		assertEquals("Berlin", it.next().getKey());
+		try {
+			it.next();
+			fail("Iterator should have stopped here.");
+		} catch (Exception e){
+			assertTrue(e instanceof NoSuchElementException);
+		}
+	}
+
+	@Test
+	public void test_iteratorFailsOnPut(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.next();
+		cache.put("Berlin", 4);
+		try {
+			it.next();
+			fail();
+		} catch (Exception e){
+			assertTrue(e instanceof ConcurrentModificationException);
+		}
+	}
+
+	@Test
+	public void test_iteratorFailsOnGet(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.next();
+		assertTrue(2 == cache.get("London"));
+		try {
+			it.next();
+			fail();
+		} catch (Exception e){
+			assertTrue(e instanceof ConcurrentModificationException);
+		}
+	}
+
+	@Test
+	public void test_iteratorFailsOnEvict(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.next();
+		cache.evict("Berlin");
+		try {
+			it.next();
+			fail();
+		} catch (Exception e){
+			assertTrue(e instanceof ConcurrentModificationException);
+		}
+	}
+
+	@Test
+	public void test_iteratorFailsOnEvictAll(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.next();
+		cache.evictAll();
+		try {
+			it.next();
+			fail();
+		} catch (Exception e){
+			assertTrue(e instanceof ConcurrentModificationException);
+		}
+	}
+
+	@Test
+	public void test_iteratorDoesntFailOnRemove(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.next();
+		it.remove();
+		assertTrue(it.next().getKey().equals("London"));
+		assertTrue(it.next().getKey().equals("New York"));
+		assertFalse(it.hasNext());
+		assertNull(cache.get("Berlin"));
+	}
+
+	@Test
+	public void test_iteratorRemoveBeforeHead(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		it.remove();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		assertTrue(it.next().getKey().equals("London"));
+		assertTrue(it.next().getKey().equals("New York"));
+		assertFalse(it.hasNext());
+		assertNotNull(cache.get("Berlin"));
+		assertNotNull(cache.get("New York"));
+		assertNotNull(cache.get("London"));
+	}
+
+	@Test
+	public void test_iteratorRemoveHead(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		it.remove();
+		assertTrue(it.next().getKey().equals("London"));
+		assertTrue(it.next().getKey().equals("New York"));
+		assertFalse(it.hasNext());
+	}
+
+	@Test
+	public void test_iteratorRemoveBeforeLast(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		assertTrue(it.next().getKey().equals("London"));
+		it.remove();
+		assertTrue(it.next().getKey().equals("New York"));
+		assertFalse(it.hasNext());
+		assertNull(cache.get("London"));
+		assertNotNull(cache.get("New York"));
+		assertNotNull(cache.get("Berlin"));
+	}
+
+	@Test
+	public void test_iteratorRemoveLast(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		assertTrue(it.next().getKey().equals("London"));
+		assertTrue(it.next().getKey().equals("New York"));
+		it.remove();
+		assertFalse(it.hasNext());
+		assertNull(cache.get("New York"));
+		assertNotNull(cache.get("London"));
+		assertNotNull(cache.get("Berlin"));
+	}
+
+	@Test
+	public void test_iteratorRemoveTwiceOnSameElement(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		assertTrue(it.next().getKey().equals("London"));
+		assertTrue(it.next().getKey().equals("New York"));
+		it.remove();
+		it.remove();
+		assertFalse(it.hasNext());
+		assertNull(cache.get("New York"));
+		assertNotNull(cache.get("London"));
+		assertNotNull(cache.get("Berlin"));
+		assertEquals(2, cache.size());
+	}
+
+	@Test
+	public void test_iteratorRemoveTwice(){
+		LRUCache<String, Integer> cache = new LRUCache<>(3);
+		cache.put("New York", 1);
+		cache.put("London", 2);
+		cache.put("Berlin", 3);
+		Iterator<LRUCache.Node<String, Integer>> it = cache.iterator();
+		assertTrue(it.next().getKey().equals("Berlin"));
+		assertTrue(it.next().getKey().equals("London"));
+		it.remove();
+		assertTrue(it.next().getKey().equals("New York"));
+		it.remove();
+		assertFalse(it.hasNext());
+		assertNull(cache.get("New York"));
+		assertNull(cache.get("London"));
+		assertNotNull(cache.get("Berlin"));
+		assertEquals(1, cache.size());
 	}
 }
